@@ -1,7 +1,7 @@
 const { test } = require('tap')
     , xserver = require('./server')
     , { str, emitterify, delay } = require('utilise/pure')
-    , { stringify } = require('cryo')
+    , { stringify } = require('cryonic')
     , { Readable } = require('stream')
 
 test('should reply via return value', ({ plan, same, notOk }) => {

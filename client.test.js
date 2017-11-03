@@ -1,6 +1,6 @@
 const { test } = require('tap')
     , { str, emitterify, extend, delay, values } = require('utilise/pure')
-    , { stringify } = require('cryo')
+    , { stringify } = require('cryonic')
     , nanosocket = require('nanosocket/fake')
     , xclient = require('./client')
     , { Blob, fakeTimeout } = require('global-mocks')
