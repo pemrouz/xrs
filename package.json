@@ -1,6 +1,6 @@
 {
   "name": "xrs",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "reactive server",
   "main": "index.js",
   "scripts": {
