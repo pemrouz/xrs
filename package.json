@@ -21,7 +21,7 @@
   "license": "pemrouz.mit-license.org",
   "devDependencies": {
     "global-mocks": "*",
-    "nanosocket": "pemrouz/nanosocket",
+    "nanosocket": "*",
     "rollup-plugin-commonjs": "^8.2.5",
     "rollup-plugin-node-resolve": "^3.0.0",
     "tap": "^10.7.2",
