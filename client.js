@@ -4,10 +4,10 @@ module.exports = function({
   socket.id = 0
   
   socket
-    .on('disconnected')
+    .once('disconnected')
     .map(d => socket
-      .once('connected')
-      .then(reconnect(socket))
+      .on('connected')
+      .map(reconnect(socket))
     )
 
   socket

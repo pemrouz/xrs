@@ -143,3 +143,29 @@ test('should continue subscriptions during reconnect', async ({ plan, same }) =>
   , str({ id: '1', data: 'foo' })
   ])
 })
+
+test('should not duplicate resubscriptions during backoff', async ({ plan, same }) => {
+  plan(1)
+
+  const socket = nanosocket()
+      , send = xclient({ socket })
+      , output = send('foo')
+  
+  socket.emit('disconnected')
+  socket.emit('disconnected')
+  socket.emit('disconnected')
+  socket.emit('disconnected')
+  socket.emit('connected')
+
+  socket.emit('disconnected')
+  socket.emit('disconnected')
+  socket.emit('disconnected')
+  socket.emit('disconnected')
+  socket.emit('connected')
+
+  same(socket.sent, [
+    str({ id: '1', data: 'foo' })
+  , str({ id: '1', data: 'foo' })
+  , str({ id: '1', data: 'foo' })
+  ])
+})
