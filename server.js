@@ -10,7 +10,7 @@ module.exports = (opts = {}, deps = {}) => {
       , server = emitterify({ express, http, ws }) 
 
   ws.sockets = []
-  ws.on('connection', connected(processor, server))
+  ws.on('connection', connected(processor, server, opts.connected))
   http.listen(port, d => {
     log('listening', server.port = http.address().port)
     server.emit('listening', server)
@@ -19,11 +19,12 @@ module.exports = (opts = {}, deps = {}) => {
   return server
 }
 
-const connected = (processor, server) => socket => {
+const connected = (processor, server, next) => socket => {
   socket.remoteAddress = socket._socket.remoteAddress
   socket.remotePort = socket._socket.remotePort
   socket.handshake = socket.upgradeReq
   socket.subscriptions = {}
+  next(socket)
   socket.on('message', message(socket, processor))
   socket.on('close', disconnected(server, socket))
   socket.on('error', err)
@@ -68,7 +69,7 @@ const message = (socket, processor) => buffer => {
 
   // TODO: For some reason, this handler is sometimes not invoked 
   // without a log statement here
-  log('recv', data.type, data.name)
+  log('recv', data.type || '', data.name || '')
 
   try {
     unwrap(req)(
