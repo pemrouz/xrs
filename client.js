@@ -2,35 +2,42 @@ module.exports = function({
   socket = require('nanosocket')()
 } = {}){
   socket.id = 0
+
+  const xrs = emitterify({ 
+    socket
+  , send: send(socket)
+  , get subscriptions(){
+      return values(socket.on)
+        .map(d => d && d[0])
+        .filter(d => d && d.type && d.type[0] == '$')
+    }
+  })
   
   socket
     .once('disconnected')
     .map(d => socket
       .on('connected')
-      .map(reconnect(socket))
+      .map(reconnect(xrs))
     )
 
   socket
     .on('recv')
     .map(d => parse(d))
-    .each(({ id, data }) => data.exec
-      ? data.exec(socket.on[`$${id}`] && socket.on[`$${id}`][0], data.value)
-      : socket.emit(`$${id}`, data)
-    )
+    .each(({ id, data, server }) => {
+      // TODO: check/warn if no sub
+      const sink = socket.on[`$${id}`] && socket.on[`$${id}`][0];
 
-  return Object.defineProperty(send(socket)
-    , 'subscriptions'
-    , { get: d => subscriptions(socket) }
-    )
+      server    ? xrs.emit('recv', { id, data, server })
+    : data.exec ? data.exec(sink, data.value)
+                : socket.emit(`$${id}`, data)
+    })
+
+  return xrs
 }
 
-const subscriptions = socket => values(socket.on)
-  .map(d => d && d[0])
-  .filter(d => d && d.type && d.type[0] == '$')
-
-const reconnect = socket => () => subscriptions(socket)
-  .map(d => d.type)
-  .map(d => socket.send(socket.on[d][0].subscription))
+const reconnect = xrs => () => xrs.subscriptions
+  // .map(d => d.type)
+  .map(({ subscription }) => xrs.socket.send(subscription))
 
 const emitterify = require('utilise/emitterify')
     , values = require('utilise/values')
@@ -56,6 +63,7 @@ const send = (socket, type) => (data, meta) => {
     .once('stop')
     .filter(reason => reason != 'CLOSED')
     .map(d => send(socket, 'UNSUBSCRIBE')(id)
+      // TODO: also force stop on close of server created sub (?)
       .filter((d, i, n) => n.source.emit('stop', 'CLOSED'))
     )
 

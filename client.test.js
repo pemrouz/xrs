@@ -12,11 +12,11 @@ const { test } = require('tap')
 test('should send request and unsubscribe', async ({ plan, same }) => {
   plan(8)
   const socket = nanosocket()
-      , send = xclient({ socket })
-      , output = send({ name: 'trades', type: 'ACTIVE', top: 10 })
+      , xrs = xclient({ socket })
+      , output = xrs.send({ name: 'trades', type: 'ACTIVE', top: 10 })
 
   // request sent
-  same(send.subscriptions.length, 1, 'subscription created')
+  same(xrs.subscriptions.length, 1, 'subscription created')
   const { id, count } = await output.once('sent')
   same(id, 1, 'increment subscription number')
   same(count, 0, 'updates on that subscription')
@@ -32,10 +32,10 @@ test('should send request and unsubscribe', async ({ plan, same }) => {
 
   // unsubscribe
   const unsubscribe = output.source.emit('stop').pop()
-  same(send.subscriptions.length, 1, 'subscription destroyed, waiting for unsubscribe response')
+  same(xrs.subscriptions.length, 1, 'subscription destroyed, waiting for unsubscribe response')
   socket.emit('recv', stringify({ id: '2', data: 'uack' }))
   same(await unsubscribe, 'uack', 'unsubscribe ack')
-  same(send.subscriptions.length, 0, 'subscriptions all destroyed')
+  same(xrs.subscriptions.length, 0, 'subscriptions all destroyed')
   
   same(await replies, [
     { type: 'update', value: {} }
@@ -52,12 +52,12 @@ test('should send request and unsubscribe', async ({ plan, same }) => {
 test('should send stream, change and unsubscribe', async ({ plan, same }) => {
   plan(6)
   const socket = nanosocket()
-      , send = xclient({ socket })
+      , xrs = xclient({ socket })
       , input = emitterify().on('change')
-      , output = send(input)
+      , output = xrs.send(input)
 
   // request sent
-  same(send.subscriptions.length, 1, 'subscription created')
+  same(xrs.subscriptions.length, 1, 'subscription created')
   const sent = collect(output.on('sent'), 2)
 
   input.next({ name: 'trades', type: 'ACTIVE', top: 10 })
@@ -65,10 +65,10 @@ test('should send stream, change and unsubscribe', async ({ plan, same }) => {
 
   // unsubscribe
   const unsubscribe = output.source.emit('stop').pop()
-  same(send.subscriptions.length, 1, 'subscription destroyed, waiting for unsubscribe response')
+  same(xrs.subscriptions.length, 1, 'subscription destroyed, waiting for unsubscribe response')
   socket.emit('recv', stringify({ id: '2', data: 'uack' }))
   same(await unsubscribe, 'uack', 'unsubscribe ack')
-  same(send.subscriptions.length, 0, 'subscription destroyed')
+  same(xrs.subscriptions.length, 0, 'subscription destroyed')
 
   same(await sent, [
     { id: 1, count: 0 }
@@ -85,7 +85,7 @@ test('should send stream, change and unsubscribe', async ({ plan, same }) => {
 test('should evaluate exec responses', async ({ plan, same }) => {
   plan(1)
   const socket = nanosocket()
-      , send = xclient({ socket })
+      , { send } = xclient({ socket })
       , output = send({})
 
   socket.emit('recv', stringify({ id: '1', data: { exec: (o, d) => o.next(d * 2),  value: 2 }}))
@@ -95,7 +95,7 @@ test('should evaluate exec responses', async ({ plan, same }) => {
 test('should send binaries', async ({ plan, same }) => {
   plan(4)
   const socket = nanosocket()
-      , send = xclient({ socket })
+      , { send } = xclient({ socket })
       , output = send(new Blob({ size: 2000 }), 'meta')
 
   await output.once('sent')
@@ -119,7 +119,7 @@ test('should continue subscriptions during reconnect', async ({ plan, same }) =>
   plan(2)
 
   const socket = nanosocket()
-      , send = xclient({ socket })
+      , { send } = xclient({ socket })
       , output = send('foo')
 
   const replies = collect(output, 2)
@@ -148,7 +148,7 @@ test('should not duplicate resubscriptions during backoff', async ({ plan, same 
   plan(1)
 
   const socket = nanosocket()
-      , send = xclient({ socket })
+      , { send } = xclient({ socket })
       , output = send('foo')
   
   socket.emit('disconnected')

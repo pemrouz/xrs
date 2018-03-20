@@ -11,8 +11,8 @@
     const { server, page } = await startup(req => 'ack')
     
     same(1, server.ws.sockets.length, 'socket added')
-    same('ack', await page.evaluate(() => send('create')), 'response')
-    same(1, await page.evaluate(() => send.subscriptions.length), 'subscription destroyed (client)') // TODO: This should be 0 - force unsubscribe
+    same('ack', await page.evaluate(() => xclient.send('create')), 'response')
+    same(1, await page.evaluate(() => xclient.subscriptions.length), 'subscription destroyed (client)') // TODO: This should be 0 - force unsubscribe
     same(0, keys(server.ws.sockets[0].subscriptions).length, 'subscription cleared (server)')
 
     await page.close()
@@ -24,10 +24,10 @@
     plan(3)
     const { server, page } = await startup((req, res) => { res('foo'), res('bar') })
     
-    same(['foo', 'bar'], await page.evaluate(() => (collect(2, $ = send('create')))), 'response')
+    same(['foo', 'bar'], await page.evaluate(() => (collect(2, $ = xclient.send('create')))), 'response')
     await page.evaluate(() => Promise.all($.source.emit('stop')))
     same(0, keys(server.ws.sockets[0].subscriptions).length, 'subscription cleared (server)')
-    same(0, await page.evaluate(() => send.subscriptions.length), 'subscription destroyed (client)')
+    same(0, await page.evaluate(() => xclient.subscriptions.length), 'subscription destroyed (client)')
     page.close()
   })
 
@@ -40,11 +40,11 @@
         input.next(1)
         input.next(2)
       })
-      return collect(2, $ = send(input))
+      return collect(2, $ = xclient.send(input))
     }), 'response')
     await page.evaluate(() => Promise.all($.source.emit('stop')))
     same(0, keys(server.ws.sockets[0].subscriptions).length, 'subscription cleared (server)')
-    same(0, await page.evaluate(() => send.subscriptions.length), 'subscription destroyed (client)')
+    same(0, await page.evaluate(() => xclient.subscriptions.length), 'subscription destroyed (client)')
     page.close()
   })
 
@@ -68,7 +68,7 @@
       const binary = new Blob([Array(2000).fill(1).join('')])
           , results = []
 
-      return $ = send(binary, { foo: 'bar' })
+      return $ = xclient.send(binary, { foo: 'bar' })
         .on('sent', d => results.push({ type: 'sent', value: d }))
         .on('progress', d => results.push({ type: 'progress', value: d }))
         .map(d => results.push({ type: 'complete', value: d }))
@@ -78,7 +78,7 @@
 
     await page.evaluate(() => Promise.all($.source.emit('stop')))
     same(0, keys(server.ws.sockets[0].subscriptions).length, 'subscription cleared (server)')
-    same(0, await page.evaluate(() => send.subscriptions.length), 'subscription destroyed (client)')
+    same(0, await page.evaluate(() => xclient.subscriptions.length), 'subscription destroyed (client)')
     page.close()
   })
 
@@ -87,7 +87,7 @@
     const { server, page } = await startup({ processor: d => 'ack1', port: 7000 })
         
     await page.evaluate(() => {
-      raw = send('something')
+      raw = xclient.send('something')
       all = raw.reduce((acc = [], d) => acc.concat(d)).filter(d => d.length == 2)
       return raw
     })
@@ -118,6 +118,23 @@
     page.close()
   })
 
+  await test('server-side push/subscribe', async ({ plan, same }) => {
+    plan(5)
+    const { server, page } = await startup(req => 'ack')
+    
+    await page.evaluate(() => { $ = xclient.once('recv') })
+    server.recv(server.ws.sockets[0], { detail: 'FOO' })
+    same({ id: 'S1', server: { detail: 'FOO' }, data: 'ack' }, await page.evaluate(() => $))
+
+    // TODO: for both client/server initatied, this should be 0 for single value, and 1 for streams
+    // same(0, await page.evaluate(() => xclient.subscriptions.length), 'subscription created (client)')
+    // same(1, keys(server.ws.sockets[0].subscriptions).length, 'subscription created (server)')
+
+    await page.close()
+    await Promise.race([delay(100), server.once('disconnected')])
+    same(server.ws.sockets.length, 0, 'socket removed')
+  })
+
   process.exit(0)
 
   async function startup(opts, pages = 1){
@@ -130,7 +147,7 @@
         collect = (count, stream) => stream
           .reduce((acc = [], d) => (acc.push(d), acc))
           .filter(d => d.length === count)
-        send = xrs()
+        xclient = xrs()
       </script>
     `))
 

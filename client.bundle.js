@@ -36,8 +36,11 @@ var def = function def(o, p, v, w){
   return o[p]
 };
 
-var emitterify = function emitterify(body) {
+var noop = function(){};
+
+var emitterify = function emitterify(body, hooks) {
   body = body || {};
+  hooks = hooks || {};
   def(body, 'emit', emit, 1);
   def(body, 'once', once, 1);
   def(body, 'off', off, 1);
@@ -81,7 +84,8 @@ var emitterify = function emitterify(body) {
       cb.isOnce = isOnce;
       cb.type = id;
       if (ns) body.on[id]['$'+(cb.ns = ns)] = cb;
-      li.push(cb);
+      li.push(cb)
+      ;(hooks.on || noop)(cb);
       return cb.next ? cb : body
     }
   }
@@ -94,7 +98,7 @@ var emitterify = function emitterify(body) {
     var i = li.length;
     while (~--i) 
       if (cb == li[i] || cb == li[i].fn || !cb)
-        li.splice(i, 1);
+        (hooks.off || noop)(li.splice(i, 1)[0]);
   }
 
   function off(type, cb) {
@@ -113,9 +117,10 @@ var emitterify = function emitterify(body) {
     o.source = opts.fn ? o.parent.source : o;
     
     o.on('stop', function(reason){
-      return o.type
+      o.type
         ? o.parent.off(o.type, o)
-        : o.parent.off(o)
+        : o.parent.off(o);
+      return o.reason = reason
     });
 
     o.each = function(fn) {
@@ -154,7 +159,7 @@ var emitterify = function emitterify(body) {
     };
 
     o.until = function(stop){
-      stop.each(function(){ o.source.emit('stop'); });
+      (stop.each || stop.then).call(stop, function(reason){ return o.source.emit('stop', reason) });
       return o
     };
 
@@ -162,18 +167,26 @@ var emitterify = function emitterify(body) {
       return remove(o.li, fn), o
     };
 
-    o[Symbol.asyncIterator] = function(){ return { 
-      next: () => (o.wait = new Promise(resolve => {
-        o.wait = true;
-        o.map((d, i, n) => {
-          delete o.wait;
-          o.off(n);
-          resolve({ value: d, done: false });
-        });
+    o.start = function(fn){
+      o.source.emit('start');
+      return o
+    };
 
-        o.emit('pull', o);
-      }))
-    }};
+    o[Symbol.asyncIterator] = function(){ 
+      return { 
+        next: function(){ 
+          return o.wait = new Promise(function(resolve){
+            o.wait = true;
+            o.map(function(d, i, n){
+              delete o.wait;
+              o.off(n);
+              resolve({ value: d, done: false });
+            });
+            o.emit('pull', o);
+          })
+        }
+      }
+    };
 
     return o
   }
@@ -204,180 +217,6 @@ const connect = (io, url) => () => {
 
 const backoff = (attempt, base = 100, cap = 10000) =>
   min(cap, base * pow(2, attempt));
-
-var promise_1$2 = promise$2;
-
-function promise$2() {
-  var resolve
-    , reject
-    , p = new Promise(function(res, rej){ 
-        resolve = res, reject = rej;
-      });
-
-  arguments.length && resolve(arguments[0]);
-  p.resolve = resolve;
-  p.reject  = reject;
-  return p
-}
-
-var flatten$3 = function flatten(p,v){ 
-  if (v instanceof Array) v = v.reduce(flatten, []);
-  return (p = p || []), p.concat(v) 
-};
-
-var has$3 = function has(o, k) {
-  return k in o
-};
-
-var def$3 = function def(o, p, v, w){
-  if (o.host && o.host.nodeName) o = o.host;
-  if (p.name) v = p, p = p.name;
-  !has$3(o, p) && Object.defineProperty(o, p, { value: v, writable: w });
-  return o[p]
-};
-
-var emitterify$3 = function emitterify(body) {
-  body = body || {};
-  def$3(body, 'emit', emit, 1);
-  def$3(body, 'once', once, 1);
-  def$3(body, 'off', off, 1);
-  def$3(body, 'on', on, 1);
-  body.on['*'] = body.on['*'] || [];
-  return body
-
-  function emit(type, pm, filter) {
-    var li = body.on[type.split('.')[0]] || []
-      , results = [];
-
-    for (var i = 0; i < li.length; i++)
-      if (!li[i].ns || !filter || filter(li[i].ns))
-        results.push(call(li[i].isOnce ? li.splice(i--, 1)[0] : li[i], pm));
-
-    for (var i = 0; i < body.on['*'].length; i++)
-      results.push(call(body.on['*'][i], [type, pm]));
-
-    return results.reduce(flatten$3, [])
-  }
-
-  function call(cb, pm){
-    return cb.next             ? cb.next(pm) 
-         : pm instanceof Array ? cb.apply(body, pm) 
-                               : cb.call(body, pm) 
-  }
-
-  function on(type, opts, isOnce) {
-    var id = type.split('.')[0]
-      , ns = type.split('.')[1]
-      , li = body.on[id] = body.on[id] || []
-      , cb = typeof opts == 'function' ? opts : 0;
-
-    return !cb &&  ns ? (cb = body.on[id]['$'+ns]) ? cb : push(observable(body, opts))
-         : !cb && !ns ? push(observable(body, opts))
-         :  cb &&  ns ? push((remove(li, body.on[id]['$'+ns] || -1), cb))
-         :  cb && !ns ? push(cb)
-                      : false
-
-    function push(cb){
-      cb.isOnce = isOnce;
-      cb.type = id;
-      if (ns) body.on[id]['$'+(cb.ns = ns)] = cb;
-      li.push(cb);
-      return cb.next ? cb : body
-    }
-  }
-
-  function once(type, callback){
-    return body.on(type, callback, true)
-  }
-
-  function remove(li, cb) {
-    var i = li.length;
-    while (~--i) 
-      if (cb == li[i] || cb == li[i].fn || !cb)
-        li.splice(i, 1);
-  }
-
-  function off(type, cb) {
-    remove((body.on[type] || []), cb);
-    if (cb && cb.ns) delete body.on[type]['$'+cb.ns];
-    return body
-  }
-
-  function observable(parent, opts) {
-    opts = opts || {};
-    var o = emitterify(opts.base || promise_1$2());
-    o.i = 0;
-    o.li = [];
-    o.fn = opts.fn;
-    o.parent = parent;
-    o.source = opts.fn ? o.parent.source : o;
-    
-    o.on('stop', function(reason){
-      return o.type
-        ? o.parent.off(o.type, o)
-        : o.parent.off(o)
-    });
-
-    o.each = function(fn) {
-      var n = fn.next ? fn : observable(o, { fn: fn });
-      o.li.push(n);
-      return n
-    };
-
-    o.pipe = function(fn) {
-      return fn(o)
-    };
-
-    o.map = function(fn){
-      return o.each(function(d, i, n){ return n.next(fn(d, i, n)) })
-    };
-
-    o.filter = function(fn){
-      return o.each(function(d, i, n){ return fn(d, i, n) && n.next(d) })
-    };
-
-    o.reduce = function(fn, acc) {
-      return o.each(function(d, i, n){ return n.next(acc = fn(acc, d, i, n)) })
-    };
-
-    o.unpromise = function(){ 
-      var n = observable(o, { base: {}, fn: function(d){ return n.next(d) } });
-      o.li.push(n);
-      return n
-    };
-
-    o.next = function(value) {
-      o.resolve && o.resolve(value);
-      return o.li.length 
-           ? o.li.map(function(n){ return n.fn(value, n.i++, n) })
-           : value
-    };
-
-    o.until = function(stop){
-      stop.each(function(){ o.source.emit('stop'); });
-      return o
-    };
-
-    o.off = function(fn){
-      return remove(o.li, fn), o
-    };
-
-    o[Symbol.asyncIterator] = function(){ return { 
-      next: () => (o.wait = new Promise(resolve => {
-        o.wait = true;
-        o.map((d, i, n) => {
-          delete o.wait;
-          o.off(n);
-          resolve({ value: d, done: false });
-        });
-
-        o.emit('pull', o);
-      }))
-    }};
-
-    return o
-  }
-};
 
 var is_1 = is;
 is.fn      = isFunction;
@@ -422,8 +261,7 @@ function isObject(d) {
 }
 
 function isLiteral(d) {
-  return typeof d == 'object' 
-      && !(d instanceof Array)
+  return d.constructor == Object
 }
 
 function isTruthy(d) {
@@ -486,24 +324,33 @@ var str = function str(d){
 
 var key = function key(k, v){ 
   var set = arguments.length > 1
-    , keys = is_1.fn(k) ? [] : str(k).split('.')
-    , root = keys.shift();
+    , keys$$1 = is_1.fn(k) ? [] : str(k).split('.').filter(Boolean)
+    , root = keys$$1.shift();
 
   return function deep(o, i){
     var masked = {};
     
     return !o ? undefined 
-         : !is_1.num(k) && !k ? o
+         : !is_1.num(k) && !k ? (set ? replace(o, v) : o)
          : is_1.arr(k) ? (k.map(copy), masked)
-         : o[k] || !keys.length ? (set ? ((o[k] = is_1.fn(v) ? v(o[k], i) : v), o)
+         : o[k] || !keys$$1.length ? (set ? ((o[k] = is_1.fn(v) ? v(o[k], i) : v), o)
                                        :  (is_1.fn(k) ? k(o) : o[k]))
-                                : (set ? (key(keys.join('.'), v)(o[root] ? o[root] : (o[root] = {})), o)
-                                       :  key(keys.join('.'))(o[root]))
+                                : (set ? (key(keys$$1.join('.'), v)(o[root] ? o[root] : (o[root] = {})), o)
+                                       :  key(keys$$1.join('.'))(o[root]))
 
     function copy(k){
       var val = key(k)(o);
-      if (val != undefined) 
+      val = is_1.fn(v)       ? v(val) 
+          : val == undefined ? v
+                           : val;
+    if (val != undefined) 
         key(k, is_1.fn(val) ? wrap(val) : val)(masked);
+    }
+
+    function replace(o, v) {
+      keys(o).map(function(k){ delete o[k]; });
+      keys(v).map(function(k){ o[k] = v[k]; });
+      return o
     }
   }
 };
@@ -761,35 +608,42 @@ module.exports = function({
   socket = nanosocket()
 } = {}){
   socket.id = 0;
+
+  const xrs = emitterify({ 
+    socket
+  , send: send(socket)
+  , get subscriptions(){
+      return values(socket.on)
+        .map(d => d && d[0])
+        .filter(d => d && d.type && d.type[0] == '$')
+    }
+  });
   
   socket
     .once('disconnected')
     .map(d => socket
       .on('connected')
-      .map(reconnect(socket))
+      .map(reconnect(xrs))
     );
 
   socket
     .on('recv')
     .map(d => parse(d))
-    .each(({ id, data }) => data.exec
-      ? data.exec(socket.on[`$${id}`] && socket.on[`$${id}`][0], data.value)
-      : socket.emit(`$${id}`, data)
-    );
+    .each(({ id, data, server }) => {
+      // TODO: check/warn if no sub
+      const sink = socket.on[`$${id}`] && socket.on[`$${id}`][0];
 
-  return Object.defineProperty(send(socket)
-    , 'subscriptions'
-    , { get: d => subscriptions(socket) }
-    )
+      server    ? xrs.emit('recv', { id, data, server })
+    : data.exec ? data.exec(sink, data.value)
+                : socket.emit(`$${id}`, data);
+    });
+
+  return xrs
 };
 
-const subscriptions = socket => values(socket.on)
-  .map(d => d && d[0])
-  .filter(d => d && d.type && d.type[0] == '$');
-
-const reconnect = socket => () => subscriptions(socket)
-  .map(d => d.type)
-  .map(d => socket.send(socket.on[d][0].subscription));
+const reconnect = xrs => () => xrs.subscriptions
+  // .map(d => d.type)
+  .map(({ subscription }) => xrs.socket.send(subscription));
 
 const { parse } = cryo;
 
@@ -812,6 +666,7 @@ const send = (socket, type) => (data, meta) => {
     .once('stop')
     .filter(reason => reason != 'CLOSED')
     .map(d => send(socket, 'UNSUBSCRIBE')(id)
+      // TODO: also force stop on close of server created sub (?)
       .filter((d, i, n) => n.source.emit('stop', 'CLOSED'))
     );
 
@@ -819,7 +674,7 @@ const send = (socket, type) => (data, meta) => {
 };
 
 const binary = (socket, blob, meta, start = 0, blockSize = 1024) => {
-  const output = emitterify$3().on('recv')
+  const output = emitterify().on('recv')
       , next = id => () =>  
           start >= blob.size 
             ? output.emit('sent', { id })

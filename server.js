@@ -7,7 +7,7 @@ module.exports = (opts = {}, deps = {}) => {
           : require('http').createServer(express)
         , ws = new (require('uws').Server)({ server: http })
         } = deps
-      , server = emitterify({ express, http, ws }) 
+      , server = emitterify({ express, http, ws, recv: recv(processor) }) 
 
   ws.sockets = []
   ws.on('connection', connected(processor, server, opts.connected))
@@ -19,11 +19,15 @@ module.exports = (opts = {}, deps = {}) => {
   return server
 }
 
-const connected = (processor, server, next) => socket => {
+const recv = processor => (socket, data) =>
+  message(socket, processor, data)({ id: `S${++socket.id}`, data })
+
+const connected = (processor, server, next = noop) => socket => {
   socket.remoteAddress = socket._socket.remoteAddress
   socket.remotePort = socket._socket.remotePort
   socket.handshake = socket.upgradeReq
   socket.subscriptions = {}
+  socket.id = 0
   next(socket)
   socket.on('message', message(socket, processor))
   socket.on('close', disconnected(server, socket))
@@ -42,7 +46,10 @@ const disconnected = (server, socket) => () => {
 }
 
 const close = ({ subscriptions }, id) => { 
-  if (!(id in subscriptions)) return 'nuack'
+  if (!(id in subscriptions)) 
+    return log('recv UNSUBSCRIBE', 'nuack'.red, `(${id})`.grey), 'nuack'
+
+  log('recv UNSUBSCRIBE', subscriptions[id].data.name || '', `(${id})`.grey)
   if (subscriptions[id].stream) {
     subscriptions[id].stream.source.emit('stop')
     subscriptions[id].stream.parent.off(subscriptions[id].stream)
@@ -51,40 +58,45 @@ const close = ({ subscriptions }, id) => {
   return 'uack'
 }
 
-const message = (socket, processor) => buffer => {
+const message = (socket, processor, server) => buffer => {
   if (buffer instanceof ArrayBuffer) 
     return socket.upload.emit('progress', buffer)
 
-  const { id, data, type } = parse(buffer)
+  const { id, data, type } = is.str(buffer) ? parse(buffer) : buffer
 
   if (id in socket.subscriptions)
     return socket.subscriptions[id].emit('data', data)
 
-  const res = data => socket.send(stringify({ id, data }))
+  const res = data => socket.send(stringify(server 
+          ? { id, data, server }
+          : { id, data }
+        ))
       , error = e => req.res({ 
-          exec: msg => console.error('(server error)', msg)
+          exec: (o, msg) => console.error('(server error)', msg)
         , value: err(e.message, '\n', e.stack)
-        })
+        })  
+      // TODO: check on unsubscribe
       , req = socket.subscriptions[id] = emitterify({ id, error, socket, data, res })
 
   // TODO: For some reason, this handler is sometimes not invoked 
   // without a log statement here
-  log('recv', data.type || '', data.name || '')
+  if (type != 'UNSUBSCRIBE')
+    log('recv', data.type || type || '', data.name || '', `(${id})`.grey)
 
   try {
-    unwrap(req)(
+    const processed = unwrap(req)(
       type == 'UNSUBSCRIBE' ? close(socket, data)
     : type == 'BINARY'      ? binary(req).then(processor)
                             : processor(req, req.res)
     ) 
-  } catch (e) { req.error(e) }
-
-  req.emit('data', data)
+    req.emit('data', data)
+    return processed
+  } catch (e) { req.error(e) } // return new Error?
 }
 
 const unwrap = req => reply => 
   !is.def(reply)     ? false
-:  is.stream(reply)  ? (req.stream = reply.map(req.res)).source.emit('start')
+:  is.stream(reply)  ? (req.stream = reply.map(req.res)).start()
 :  is.promise(reply) ? reply
                         .then(unwrap(req))
                         .catch(req.error)
