@@ -119,7 +119,7 @@
   })
 
   await test('server-side push/subscribe', async ({ plan, same }) => {
-    plan(5)
+    plan(2)
     const { server, page } = await startup(req => 'ack')
     
     await page.evaluate(() => { $ = xclient.once('recv') })
