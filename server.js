@@ -72,7 +72,7 @@ const serialise = (input, refs = []) =>{
         : value
     ).replace(/"__REF__(\d+)"/g, ($1, $2) => refs[$2].toString())
   } catch (e) {
-    err(`failed to serialise (${e.message}): ${input}`)
+    err(`failed to serialise (${e.message}):`, input)
   }
 }
 
