@@ -112,7 +112,7 @@
       result = $.filter(result => result === true)
     })
 
-    server.ws.sockets.map(socket => socket.send(stringify({ data: { value: 42, exec }})))
+    server.ws.sockets.map(socket => socket.send('{"data":{"exec":(o, v) => { $.next(typeof o == \'undefined\' && v === 42) },"value":42 }}'))
     same(await page.evaluate(() => result), true)
 
     page.close()
@@ -124,7 +124,7 @@
     
     await page.evaluate(() => { $ = xclient.once('recv') })
     server.recv(server.ws.sockets[0], { detail: 'FOO' })
-    same({ id: 'S1', server: { detail: 'FOO' }, data: 'ack' }, await page.evaluate(() => $))
+    same('ack', await page.evaluate(() => $))
 
     // TODO: for both client/server initatied, this should be 0 for single value, and 1 for streams
     // same(0, await page.evaluate(() => xclient.subscriptions.length), 'subscription created (client)')

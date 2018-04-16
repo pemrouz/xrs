@@ -1,6 +1,6 @@
 const { test } = require('tap')
     , { str, emitterify, extend, delay, values } = require('utilise/pure')
-    , { stringify } = require('cryonic')
+    , { stringify } = JSON
     , nanosocket = require('nanosocket/fake')
     , xclient = require('./client')
     , { Blob, fakeTimeout } = require('global-mocks')
@@ -88,7 +88,7 @@ test('should evaluate exec responses', async ({ plan, same }) => {
       , { send } = xclient({ socket })
       , output = send({})
 
-  socket.emit('recv', stringify({ id: '1', data: { exec: (o, d) => o.next(d * 2),  value: 2 }}))
+  socket.emit('recv', '{"id":"1","data":{"exec":(o, v) => o.next(v*2),"value":2}}')
   same(await output, 4, 'reply')
 })
 
@@ -100,11 +100,11 @@ test('should send binaries', async ({ plan, same }) => {
 
   await output.once('sent')
 
-  socket.emit('recv', stringify({ id: '1', data: 'back' }))
+  socket.emit('recv', '{"id":"1","data":"back"}')
   output.once('progress', d => same(d, { received: 1024, total: 2000 }), 'progress 1')
-  socket.emit('recv', stringify({ id: '1', data: { exec: (o, v) => o.emit('progress', v), value: 1024 } }))
+  socket.emit('recv', '{"id":"1","data":{"exec":(o, v) => o.emit(\'progress\', v),"value":1024}}')
   output.once('progress', d => same(d, { received: 2000, total: 2000 }), 'progress 2')
-  socket.emit('recv', stringify({ id: '1', data: { exec: (o, v) => o.emit('progress', v), value: 2000 } }))
+  socket.emit('recv', '{"id":"1","data":{"exec":(o, v) => o.emit(\'progress\', v),"value":2000}}')
 
   same(socket.sent, [
     str({ id: '1', data: { size: 2000, meta: 'meta' }, type: 'BINARY' })

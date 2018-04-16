@@ -3,7 +3,7 @@ module.exports = function({
 } = {}){
   socket.id = 0
 
-  const xrs = emitterify({ 
+  const server = emitterify({ 
     socket
   , send: send(socket)
   , get subscriptions(){
@@ -17,33 +17,33 @@ module.exports = function({
     .once('disconnected')
     .map(d => socket
       .on('connected')
-      .map(reconnect(xrs))
+      .map(reconnect(server))
     )
 
   socket
     .on('recv')
-    .map(d => parse(d))
-    .each(({ id, data, server }) => {
+    .map(deserialise)
+    .each(({ id, data }) => {
       // TODO: check/warn if no sub
       const sink = socket.on[`$${id}`] && socket.on[`$${id}`][0];
 
-      server    ? xrs.emit('recv', { id, data, server })
-    : data.exec ? data.exec(sink, data.value)
+      data.exec ? data.exec(sink, data.value)
+    : !id       ? server.emit('recv', data)
                 : socket.emit(`$${id}`, data)
     })
 
-  return xrs
+  return server
 }
 
-const reconnect = xrs => () => xrs.subscriptions
-  // .map(d => d.type)
-  .map(({ subscription }) => xrs.socket.send(subscription))
+const deserialise = input => (new Function(`return ${input}`))()
+
+const reconnect = server => () => server.subscriptions
+  .map(({ subscription }) => server.socket.send(subscription))
 
 const emitterify = require('utilise/emitterify')
     , values = require('utilise/values')
     , str = require('utilise/str')
-    , { parse } = require('cryonic')
-
+    
 const send = (socket, type) => (data, meta) => {
   if (data instanceof window.Blob) 
     return binary(socket, data, meta)
