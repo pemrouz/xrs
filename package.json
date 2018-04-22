@@ -25,13 +25,13 @@
     "rollup-plugin-commonjs": "^8.2.5",
     "rollup-plugin-node-resolve": "^3.0.0",
     "tap": "^10.7.2",
-    "utilise.emitterify": "^1.6.1"
+    "utilise.emitterify": "^1.7.2"
   },
   "dependencies": {
     "colors": "^1.2.1",
     "express": "^4.15.4",
     "nanosocket": "*",
-    "utilise": "^2.3.1",
-    "uws": "^9.14.0"
+    "utilise": "^2.3.5",
+    "uws": "^9.148.0"
   }
 }
